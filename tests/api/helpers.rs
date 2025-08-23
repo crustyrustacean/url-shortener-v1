@@ -1,0 +1,140 @@
+// tests/api/helpers.rs
+
+// types and functions used across all integration tests
+
+// dependencies
+use reqwest::Client;
+use sqlx::{postgres::{PgConnectOptions, PgPoolOptions, PgSslMode}, Connection, Executor, PgConnection, PgPool};
+use std::env::var;
+use std::io::{sink, stdout};
+use std::sync::LazyLock;
+use testcontainers_modules::{postgres::Postgres, testcontainers::{runners::AsyncRunner, ContainerAsync}};
+use tokio::net::TcpListener;
+use url_shortener_v1_lib::startup::Application;
+use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
+use uuid::Uuid;
+
+// static constant which creates one instance of tracing
+static TRACING: LazyLock<()> = LazyLock::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
+    if var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, sink);
+        init_subscriber(subscriber);
+    }
+});
+
+// struct type to represent the test database settings
+#[derive(Clone, Debug)]
+struct DatabaseSettings {
+    pub username: String,
+    pub password: String,
+    pub port: u16,
+    pub host: String,
+    pub database_name: String,
+}
+
+// methods for the DatabaseSettings type
+impl DatabaseSettings {
+    pub fn new(host_port: u16) -> Self {
+        DatabaseSettings {
+            username: "postgres".into(),
+            password: "postgres".into(),
+            port: host_port,
+            host: "localhost".into(),
+            database_name: Uuid::new_v4().to_string(),
+        }
+    }
+
+    pub fn without_db(&self) -> PgConnectOptions {
+        PgConnectOptions::new()
+            .host(&self.host)
+            .username(&self.username)
+            .password(&self.password)
+            .port(self.port)
+            .ssl_mode(PgSslMode::Disable)
+    }
+
+    pub fn with_db(&self) -> PgConnectOptions {
+        self.without_db().database(&self.database_name)
+    }
+}
+
+// function to configure the testing database
+async fn configure_database(config: &DatabaseSettings) -> PgPool {
+    let mut connection = PgConnection::connect_with(&config.without_db())
+        .await
+        .expect("Failed to connect to Postgres.");
+
+    connection
+        .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
+        .await
+        .expect("Failed to create database.");
+
+    let connection_pool = PgPoolOptions::new()
+        .max_connections(20)
+        .min_connections(5)
+        .acquire_timeout(std::time::Duration::from_secs(10))
+        .idle_timeout(None)
+        .max_lifetime(None)
+        .connect_with(config.with_db())
+        .await
+        .expect("Unable to create database connection pool.");
+
+    sqlx::migrate!("./migrations")
+        .run(&connection_pool)
+        .await
+        .expect("Failed to migrate the database.");
+
+    connection_pool
+}
+
+// struct type which models a test application
+#[allow(dead_code)]
+pub struct TestApp {
+    pub address: String,
+    pub port: u16,
+    pub pool: PgPool,
+    pub client: Client,
+    pub container: ContainerAsync<Postgres>
+}
+
+// helper function which builds and returns a test application
+pub async fn spawn_app() -> TestApp {
+    LazyLock::force(&TRACING);
+
+    let container = Postgres::default()
+        .start()
+        .await
+        .expect("Unable to start testcontainers Postgres image.");
+
+    let host_port = container.get_host_port_ipv4(5432).await.expect("Unable to obtain a host port for the database test container.");
+    
+    let db_config = DatabaseSettings::new(host_port);
+    let pool = configure_database(&db_config).await;
+    let application = Application::build(pool.clone());
+    let listener = TcpListener::bind("localhost:0")
+        .await
+        .expect("Failed to bind port.");
+    let addr = listener.local_addr().unwrap();
+    let port = addr.port();
+
+    tokio::spawn(application.run_until_stopped(listener));
+
+    // build a client to make requests
+    let client = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    TestApp {
+        address: format!("http://localhost:{}", port),
+        port,
+        pool,
+        client,
+        container,
+    }
+}

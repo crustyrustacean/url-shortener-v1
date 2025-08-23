@@ -1,0 +1,11 @@
+# gitignore config - these things are not commited to the repo
+
+# VS Code Settings
+.vscode
+
+# Build artifacts
+/target
+
+# Shuttle configuration
+.shuttle*
+Secrets*.toml
