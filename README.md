@@ -210,7 +210,7 @@ This project is licensed under the MIT License - see the [License.txt](License.t
 
 **Jeffery D. Mitchell**
 - Email: crusty.rustacean@gmail.com
-- GitHub: [@sentinel1909](https://github.com/sentinel1909)
+- GitHub: [@crustyrustacean](https://github.com/crustyrustacean)
 
 ## 🙏 Acknowledgments
 

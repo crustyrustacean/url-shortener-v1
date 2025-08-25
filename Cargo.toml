@@ -1,6 +1,6 @@
 [package]
 name = "url-shortener-v1"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Jeffery D. Mitchell", "<crusty.rustacean@gmail.com>"]
 edition = "2021"
 description = "An API which provides a URL shortening service."
