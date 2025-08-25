@@ -10,6 +10,7 @@ use std::io::{sink, stdout};
 use std::sync::LazyLock;
 use testcontainers_modules::{postgres::Postgres, testcontainers::{runners::AsyncRunner, ContainerAsync}};
 use tokio::net::TcpListener;
+use tokio::sync::OnceCell;
 use url_shortener_v1_lib::startup::Application;
 use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
 use uuid::Uuid;
@@ -26,6 +27,21 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
         init_subscriber(subscriber);
     }
 });
+
+// static constant which creates one instance of the test database container
+static POSTGRES_CONTAINER: OnceCell<ContainerAsync<Postgres>> = OnceCell::const_new();
+
+// function to create the Postgres container
+async fn get_postgres_container() -> &'static ContainerAsync<Postgres> {
+    POSTGRES_CONTAINER
+        .get_or_init(|| async {
+            Postgres::default()
+                .start()
+                .await
+                .expect("Failed to start Postgres testcontainer")
+        })
+        .await
+}
 
 // struct type to represent the test database settings
 #[derive(Clone, Debug)]
@@ -99,29 +115,36 @@ pub struct TestApp {
     pub port: u16,
     pub pool: PgPool,
     pub client: Client,
-    pub container: ContainerAsync<Postgres>
 }
 
 // helper function which builds and returns a test application
 pub async fn spawn_app() -> TestApp {
     LazyLock::force(&TRACING);
 
-    let container = Postgres::default()
-        .start()
-        .await
-        .expect("Unable to start testcontainers Postgres image.");
+    // create the database test container
+    let container = get_postgres_container().await;
 
+    // get the container port
     let host_port = container.get_host_port_ipv4(5432).await.expect("Unable to obtain a host port for the database test container.");
     
+    // build the test database configuration
     let db_config = DatabaseSettings::new(host_port);
+    // configure and return a database connection pool
     let pool = configure_database(&db_config).await;
+
+    // create the test application
     let application = Application::build(pool.clone());
-    let listener = TcpListener::bind("localhost:0")
+
+    // create a listener
+    let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("Failed to bind port.");
-    let addr = listener.local_addr().unwrap();
+
+    // get the address and port from the listener
+    let addr = listener.local_addr().expect("Unable to obtain the address of the listener.");
     let port = addr.port();
 
+    // spawn the application
     tokio::spawn(application.run_until_stopped(listener));
 
     // build a client to make requests
@@ -131,10 +154,9 @@ pub async fn spawn_app() -> TestApp {
         .unwrap();
 
     TestApp {
-        address: format!("http://localhost:{}", port),
+        address: format!("http://127.0.0.1:{}", port),
         port,
         pool,
         client,
-        container,
     }
 }
