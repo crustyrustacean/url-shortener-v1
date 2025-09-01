@@ -28,7 +28,7 @@ pub async fn post_shorten(
     sqlx::query("INSERT INTO urls (id, url) VALUES ($1, $2)")
         .bind(id)
         .bind(p_url.as_str())
-        .execute(&state.pool.unwrap())
+        .execute(&state.pool)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let response_body = format!("https://{}/{}\n", host, id);

@@ -22,7 +22,7 @@ pub async fn get_redirect(
 ) -> Result<impl IntoResponse, ApiError> {
     let url: (String,) = sqlx::query_as("SELECT url FROM urls WHERE id = $1")
         .bind(id)
-        .fetch_one(&state.pool.unwrap())
+        .fetch_one(&state.pool)
         .await
         .map_err(|e| match e {
             Error::RowNotFound => {
