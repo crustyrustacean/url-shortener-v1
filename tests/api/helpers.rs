@@ -4,14 +4,22 @@
 
 // dependencies
 use reqwest::Client;
-use sqlx::{postgres::{PgConnectOptions, PgPoolOptions, PgSslMode}, Connection, Executor, PgConnection, PgPool};
+use sqlx::{
+    Connection, Executor, PgConnection, PgPool,
+    postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
+};
 use std::env::var;
 use std::io::{sink, stdout};
 use std::sync::LazyLock;
-use testcontainers_modules::{postgres::Postgres, testcontainers::{runners::AsyncRunner, ContainerAsync}};
+use testcontainers_modules::{
+    postgres::Postgres,
+    testcontainers::{ContainerAsync, runners::AsyncRunner},
+};
 use tokio::net::TcpListener;
 use tokio::sync::OnceCell;
-use url_shortener_v1_lib::startup::Application;
+use url_shortener_v1_lib::config::AppConfig;
+use url_shortener_v1_lib::startup::App;
+use url_shortener_v1_lib::state::AppState;
 use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
 use uuid::Uuid;
 
@@ -125,15 +133,23 @@ pub async fn spawn_app() -> TestApp {
     let container = get_postgres_container().await;
 
     // get the container port
-    let host_port = container.get_host_port_ipv4(5432).await.expect("Unable to obtain a host port for the database test container.");
-    
+    let host_port = container
+        .get_host_port_ipv4(5432)
+        .await
+        .expect("Unable to obtain a host port for the database test container.");
+
     // build the test database configuration
     let db_config = DatabaseSettings::new(host_port);
+
     // configure and return a database connection pool
     let pool = configure_database(&db_config).await;
 
+    let app_config = AppConfig::default();
+
+    let app_state = AppState::new(pool.clone());
+
     // create the test application
-    let application = Application::build(pool.clone());
+    let application = App::new(app_config, app_state);
 
     // create a listener
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -141,7 +157,9 @@ pub async fn spawn_app() -> TestApp {
         .expect("Failed to bind port.");
 
     // get the address and port from the listener
-    let addr = listener.local_addr().expect("Unable to obtain the address of the listener.");
+    let addr = listener
+        .local_addr()
+        .expect("Unable to obtain the address of the listener.");
     let port = addr.port();
 
     // spawn the application

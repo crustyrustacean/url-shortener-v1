@@ -1,11 +1,14 @@
 // src/bin/main.rs
 
 // binary crate for the url-shortener-v1 project
-use shuttle_runtime::CustomError;
-use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
+
 // dependencies
+use shuttle_runtime::CustomError;
 use sqlx::PgPool;
-use url_shortener_v1_lib::startup::Application;
+use url_shortener_v1_lib::config::AppConfig;
+use url_shortener_v1_lib::startup::App;
+use url_shortener_v1_lib::state::AppState;
+use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
 
 // main function
 #[shuttle_runtime::main]
@@ -24,8 +27,17 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::Shut
             CustomError::new(err).context(msg)
         })?;
 
-    tracing::info!("Building the application...");
-    let Application(router) = Application::build(pool);
+    // Load configuration
+    tracing::info!("Loading app configuration...");
+    let app_config = AppConfig::default();
 
-    Ok(router.into())
+    // Build the application state
+    tracing::info!("Building the app state...");
+    let app_state = AppState::new(pool);
+
+    // Initialize the application
+    tracing::info!("Initializing the app...");
+    let app = App::new(app_config, app_state);
+
+    Ok(app.router.into())
 }

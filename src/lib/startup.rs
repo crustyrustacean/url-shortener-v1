@@ -3,14 +3,15 @@
 // contains all the startup and configuration logic for the application
 
 // dependencies
+use crate::config::AppConfig;
 use crate::routes::{get_redirect, health_check, post_shorten};
+use crate::state::AppState;
 use crate::telemetry::MakeRequestUuid;
 use axum::{
+    Router,
     http::HeaderName,
     routing::{get, post},
-    Router,
 };
-use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -19,13 +20,22 @@ use tower_http::{
 };
 use tracing::Level;
 
-// struct type to represent the application, wraps an Axum Router type
-pub struct Application(pub Router);
+// struct type to represent the application
+pub struct App {
+    pub config: AppConfig,
+    pub router: Router,
+}
 
-// methods for the Application type
-impl Application {
-    // builds the router for the application
-    pub fn build(pool: PgPool) -> Self {
+// methods to build the application
+impl App {
+    // create a new application instance
+    pub fn new(config: AppConfig, state: AppState) -> Self {
+        let router = Self::build_router(state);
+        Self { config, router }
+    }
+
+    // build the application router with all routes and middleware layers
+    pub fn build_router(state: AppState) -> Router {
         // define the tracing layer
         let trace_layer = TraceLayer::new_for_http()
             .make_span_with(
@@ -36,12 +46,12 @@ impl Application {
             .on_response(DefaultOnResponse::new().include_headers(true));
         let x_request_id = HeaderName::from_static("x-request-id");
 
-        // build the router, with state and tracing
-        let router = Router::new()
+        // build the application router
+        Router::new()
             .route("/health_check", get(health_check))
             .route("/{id}", get(get_redirect))
             .route("/", post(post_shorten))
-            .with_state(pool)
+            .with_state(state)
             .layer(
                 ServiceBuilder::new()
                     .layer(SetRequestIdLayer::new(
@@ -50,13 +60,12 @@ impl Application {
                     ))
                     .layer(trace_layer)
                     .layer(PropagateRequestIdLayer::new(x_request_id)),
-            );
-
-        Self(router)
+            )
     }
 
-    // utility function to run the application until stopped, to facilitate testing
-    pub async fn run_until_stopped(self, listener: TcpListener ) {
-        axum::serve(listener, self.0).await.unwrap();
+    /// run the application until stopped (utility function to faciliate local integration testing)
+    pub async fn run_until_stopped(self, listener: TcpListener) -> Result<(), anyhow::Error> {
+        axum::serve(listener, self.router).await?;
+        Ok(())
     }
 }
