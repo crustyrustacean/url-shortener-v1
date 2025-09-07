@@ -7,14 +7,16 @@ pub mod config;
 pub mod errors;
 pub mod response;
 pub mod routes;
-pub mod startup;
+pub mod service;
 pub mod state;
 pub mod telemetry;
+pub mod types;
 
 // re-exports
 pub use config::*;
 pub use errors::*;
 pub use response::*;
-pub use startup::*;
+pub use service::*;
 pub use state::*;
 pub use telemetry::*;
+pub use types::*;

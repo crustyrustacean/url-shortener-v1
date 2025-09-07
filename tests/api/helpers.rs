@@ -18,7 +18,7 @@ use testcontainers_modules::{
 use tokio::net::TcpListener;
 use tokio::sync::OnceCell;
 use url_shortener_v1_lib::config::AppConfig;
-use url_shortener_v1_lib::startup::App;
+use url_shortener_v1_lib::service::AppService;
 use url_shortener_v1_lib::state::AppState;
 use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
 use uuid::Uuid;
@@ -149,7 +149,7 @@ pub async fn spawn_app() -> TestApp {
     let app_state = AppState::new(pool.clone());
 
     // create the test application
-    let application = App::new(app_config, app_state);
+    let app_service = AppService::new(app_config, app_state);
 
     // create a listener
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -163,7 +163,7 @@ pub async fn spawn_app() -> TestApp {
     let port = addr.port();
 
     // spawn the application
-    tokio::spawn(application.run_until_stopped(listener));
+    tokio::spawn(app_service.run_until_stopped(listener));
 
     // build a client to make requests
     let client = Client::builder()

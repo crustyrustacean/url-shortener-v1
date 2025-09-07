@@ -3,16 +3,17 @@
 // binary crate for the url-shortener-v1 project
 
 // dependencies
-use shuttle_runtime::CustomError;
-use sqlx::PgPool;
 use url_shortener_v1_lib::config::AppConfig;
-use url_shortener_v1_lib::startup::App;
+use url_shortener_v1_lib::service::AppService;
 use url_shortener_v1_lib::state::AppState;
 use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
+use url_shortener_v1_lib::types::{AppServicePool, ShuttleError};
 
 // main function
 #[shuttle_runtime::main]
-async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::ShuttleAxum {
+async fn main(
+    #[shuttle_shared_db::Postgres] pool: AppServicePool,
+) -> Result<AppService, shuttle_runtime::Error> {
     // initialize tracing
     let subscriber = get_subscriber("url-shortener-v1".into(), "info".into(), std::io::stdout);
     init_subscriber(subscriber);
@@ -24,7 +25,7 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::Shut
         .await
         .map_err(|err| {
             let msg = format!("Unable to run the database migrations: {}", err);
-            CustomError::new(err).context(msg)
+            ShuttleError::new(err).context(msg)
         })?;
 
     // Load configuration
@@ -37,7 +38,7 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::Shut
 
     // Initialize the application
     tracing::info!("Initializing the app...");
-    let app = App::new(app_config, app_state);
+    let app_service = AppService::new(app_config, app_state);
 
-    Ok(app.router.into())
+    Ok(app_service)
 }

@@ -12,6 +12,8 @@ use axum::{
     http::HeaderName,
     routing::{get, post},
 };
+use shuttle_runtime::Service;
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -21,13 +23,13 @@ use tower_http::{
 use tracing::Level;
 
 // struct type to represent the application
-pub struct App {
+pub struct AppService {
     pub config: AppConfig,
     pub router: Router,
 }
 
 // methods to build the application
-impl App {
+impl AppService {
     // create a new application instance
     pub fn new(config: AppConfig, state: AppState) -> Self {
         let router = Self::build_router(state);
@@ -63,9 +65,25 @@ impl App {
             )
     }
 
-    /// run the application until stopped (utility function to faciliate local integration testing)
+    // run the application until stopped (utility function to faciliate local integration testing)
     pub async fn run_until_stopped(self, listener: TcpListener) -> Result<(), anyhow::Error> {
         axum::serve(listener, self.router).await?;
+        Ok(())
+    }
+}
+
+#[shuttle_runtime::async_trait]
+impl Service for AppService {
+    async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
+        let router = self.router;
+
+        let listener = TcpListener::bind(addr).await?;
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await?;
+
         Ok(())
     }
 }
