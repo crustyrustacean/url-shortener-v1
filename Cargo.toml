@@ -1,6 +1,6 @@
 [package]
 name = "url-shortener-v1"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Jeffery D. Mitchell", "<crusty.rustacean@gmail.com>"]
 edition = "2024"
 description = "An API which provides a URL shortening service."
@@ -29,11 +29,12 @@ serde = { version = "1.0.219", features = ["derive"] }
 shuttle-axum = "0.56.0"
 shuttle-runtime = { version = "0.56.0", default-features = false }
 shuttle-shared-db = { version = "0.56.0", features = ["postgres", "sqlx"] }
-sqlx = { version = "0.8.5", features = [ "runtime-tokio", "tls-rustls" ] } 
+sqlx = { version = "0.8.5", features = [ "runtime-tokio", "tls-rustls" ] }
 thiserror = "2.0.16"
 tokio = "1.44.2"
 tower = "0.5.2"
 tower-http = { version = "0.6.2", features = ["request-id", "trace", "util"] }
+tower_governor = { version = "0.8.0", features = ["axum", "tracing"] }
 tracing = { version = "0.1.41", features = ["log"] }
 tracing-bunyan-formatter = "0.3.10"
 tracing-log = "0.2.0"
