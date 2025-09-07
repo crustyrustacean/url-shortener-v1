@@ -72,6 +72,7 @@ impl AppService {
     }
 }
 
+// implement the Shuttle `Service` trait for the `AppService` type
 #[shuttle_runtime::async_trait]
 impl Service for AppService {
     async fn bind(mut self, addr: SocketAddr) -> Result<(), shuttle_runtime::Error> {
