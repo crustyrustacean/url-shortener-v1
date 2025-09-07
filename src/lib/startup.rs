@@ -14,8 +14,6 @@ use axum::{
 };
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
-use tower_governor::GovernorLayer;
-use tower_governor::governor::GovernorConfigBuilder;
 use tower_http::{
     request_id::{PropagateRequestIdLayer, SetRequestIdLayer},
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
@@ -48,19 +46,12 @@ impl App {
             .on_response(DefaultOnResponse::new().include_headers(true));
         let x_request_id = HeaderName::from_static("x-request-id");
 
-        let governor_conf = GovernorConfigBuilder::default()
-            .per_second(2)
-            .burst_size(5)
-            .finish()
-            .unwrap();
-
         // build the application router
         Router::new()
             .route("/health_check", get(health_check))
             .route("/{id}", get(get_redirect))
             .route("/", post(post_shorten))
             .with_state(state)
-            .layer(GovernorLayer::new(governor_conf))
             .layer(
                 ServiceBuilder::new()
                     .layer(SetRequestIdLayer::new(
