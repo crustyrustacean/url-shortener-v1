@@ -67,7 +67,12 @@ impl AppService {
 
     // run the application until stopped (utility function to faciliate local integration testing)
     pub async fn run_until_stopped(self, listener: TcpListener) -> Result<(), anyhow::Error> {
-        axum::serve(listener, self.router).await?;
+        axum::serve(
+            listener,
+            self.router
+                .into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await?;
         Ok(())
     }
 }
