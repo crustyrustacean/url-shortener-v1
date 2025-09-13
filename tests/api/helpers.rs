@@ -3,12 +3,16 @@
 // types and functions used across all integration tests
 
 // dependencies
+use anyhow::{Context, Result, anyhow};
 use reqwest::Client;
 use sqlx::{
     Connection, Executor, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
 };
+use shuttle_common::secrets::Secret;
+use std::collections::BTreeMap;
 use std::env::var;
+use std::fs;
 use std::io::{sink, stdout};
 use std::sync::LazyLock;
 use testcontainers_modules::{
@@ -17,10 +21,12 @@ use testcontainers_modules::{
 };
 use tokio::net::TcpListener;
 use tokio::sync::OnceCell;
+use toml::Value;
 use url_shortener_v1_lib::config::AppConfig;
 use url_shortener_v1_lib::service::AppService;
 use url_shortener_v1_lib::state::AppState;
 use url_shortener_v1_lib::telemetry::{get_subscriber, init_subscriber};
+use url_shortener_v1_lib::types::ShuttleSecretStore;
 use uuid::Uuid;
 
 // static constant which creates one instance of tracing
@@ -116,6 +122,35 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
     connection_pool
 }
 
+// Load Shuttle secrets for tests from Secrets.dev.toml (preferred) or Secrets.toml.
+fn load_test_secret_store() -> Result<ShuttleSecretStore> {
+    let path = if fs::metadata("Secrets.dev.toml").is_ok() {
+        "Secrets.dev.toml"
+    } else if fs::metadata("Secrets.toml").is_ok() {
+        "Secrets.toml"
+    } else {
+        return Err(anyhow!(
+            "Neither Secrets.dev.toml nor Secrets.toml found in project root"
+        ));
+    };
+
+    let txt = fs::read_to_string(path).with_context(|| format!("Reading {}", path))?;
+    let val: Value = toml::from_str(&txt).with_context(|| format!("Parsing {}", path))?;
+    let table = val
+        .as_table()
+        .ok_or_else(|| anyhow!("Root of {} must be a TOML table", path))?;
+
+    let mut map: BTreeMap<String, Secret<String>> = BTreeMap::new();
+    for (k, v) in table {
+        let s = v
+            .as_str()
+            .ok_or_else(|| anyhow!("Secret {k} must be a string in {}", path))?;
+        map.insert(k.clone(), Secret::new(s.to_owned()));
+    }
+
+    Ok(ShuttleSecretStore::new(map))
+}
+
 // struct type which models a test application
 #[allow(dead_code)]
 pub struct TestApp {
@@ -144,7 +179,10 @@ pub async fn spawn_app() -> TestApp {
     // configure and return a database connection pool
     let pool = configure_database(&db_config).await;
 
-    let app_config = AppConfig::default();
+     // load secrets and build AppConfig
+    let secrets = load_test_secret_store().expect("Failed to load Shuttle secrets for tests.");
+    let app_config =
+        AppConfig::try_from(&secrets).expect("Failed to build AppConfig from Shuttle secrets.");
 
     let app_state = AppState::new(pool.clone());
 

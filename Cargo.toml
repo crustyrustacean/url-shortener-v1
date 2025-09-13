@@ -1,6 +1,6 @@
 [package]
 name = "url-shortener-v1"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Jeffery D. Mitchell", "<crusty.rustacean@gmail.com>"]
 edition = "2024"
 description = "An API which provides a URL shortening service."
@@ -43,5 +43,7 @@ uuid = { version = "1.18.1", features = ["v4"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12.12", features = [ "json" ] }
+shuttle-common = "0.57.0"
 testcontainers-modules = { version = "0.13.0", features = [ "postgres" ] }
+toml = "0.9.5"
 uuid = "1.11.1"
