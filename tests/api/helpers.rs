@@ -158,6 +158,7 @@ pub struct TestApp {
     pub port: u16,
     pub pool: PgPool,
     pub client: Client,
+    pub api_key: Uuid,
 }
 
 // helper function which builds and returns a test application
@@ -187,6 +188,9 @@ pub async fn spawn_app() -> TestApp {
     // build the AppState using AppConfig and the created test database pool
     let app_state = AppState::new(app_config, pool.clone());
 
+    // get the api_key from config
+    let api_key = *app_state.config.api_key();
+
     // create the test application
     let app_service = AppService::new(app_state);
 
@@ -215,5 +219,6 @@ pub async fn spawn_app() -> TestApp {
         port,
         pool,
         client,
+        api_key,
     }
 }

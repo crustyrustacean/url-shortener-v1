@@ -49,13 +49,13 @@ impl AppService {
         let x_request_id = HeaderName::from_static("x-request-id");
 
         let secure_api = Router::new()
-            .route("/{id}", get(get_redirect))
             .route("/", post(post_shorten))
             .route_layer(from_fn_with_state(state.clone(), check_api_key));
 
         // build the application router
         Router::new()
             .route("/health_check", get(health_check))
+            .route("/{id}", get(get_redirect))
             .merge(secure_api)
             .with_state(state)
             .layer(

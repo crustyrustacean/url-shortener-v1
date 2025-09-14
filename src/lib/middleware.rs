@@ -1,6 +1,7 @@
 // src/lib/middleware.rs
 
 // dependencies
+use crate::response::ApiResponse;
 use crate::state::AppState;
 use axum::{
     extract::{Request, State},
@@ -8,21 +9,24 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use uuid::Uuid;
 
 pub async fn check_api_key(
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Response {
-    let api_key = state.config.api_key().to_string();
+    let api_key: &Uuid = state.config.api_key();
 
     let provided_api_key = request
         .headers()
         .get("x-api-key")
-        .and_then(|h| h.to_str().ok());
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| Uuid::parse_str(s.trim()).ok());
 
-    match provided_api_key {
-        Some(k) if k == api_key => next.run(request).await,
-        _ => (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    if provided_api_key.as_ref() == Some(api_key) {
+        next.run(request).await
+    } else {
+        ApiResponse::<()>::error("Unauthorized", StatusCode::UNAUTHORIZED).into_response()
     }
 }
