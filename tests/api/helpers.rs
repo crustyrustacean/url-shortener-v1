@@ -5,11 +5,11 @@
 // dependencies
 use anyhow::{Context, Result, anyhow};
 use reqwest::Client;
+use shuttle_common::secrets::Secret;
 use sqlx::{
     Connection, Executor, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
 };
-use shuttle_common::secrets::Secret;
 use std::collections::BTreeMap;
 use std::env::var;
 use std::fs;
@@ -179,15 +179,16 @@ pub async fn spawn_app() -> TestApp {
     // configure and return a database connection pool
     let pool = configure_database(&db_config).await;
 
-     // load secrets and build AppConfig
+    // load secrets and build AppConfig
     let secrets = load_test_secret_store().expect("Failed to load Shuttle secrets for tests.");
     let app_config =
         AppConfig::try_from(&secrets).expect("Failed to build AppConfig from Shuttle secrets.");
 
-    let app_state = AppState::new(pool.clone());
+    // build the AppState using AppConfig and the created test database pool
+    let app_state = AppState::new(app_config, pool.clone());
 
     // create the test application
-    let app_service = AppService::new(app_config, app_state);
+    let app_service = AppService::new(app_state);
 
     // create a listener
     let listener = TcpListener::bind("127.0.0.1:0")

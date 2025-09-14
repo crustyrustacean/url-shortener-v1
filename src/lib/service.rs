@@ -3,13 +3,14 @@
 // contains all the startup and configuration logic for the application
 
 // dependencies
-use crate::config::AppConfig;
+use crate::middleware::check_api_key;
 use crate::routes::{get_redirect, health_check, post_shorten};
 use crate::state::AppState;
 use crate::telemetry::MakeRequestUuid;
 use axum::{
     Router,
     http::HeaderName,
+    middleware::from_fn_with_state,
     routing::{get, post},
 };
 use shuttle_runtime::Service;
@@ -24,16 +25,15 @@ use tracing::Level;
 
 // struct type to represent the application
 pub struct AppService {
-    pub config: AppConfig,
     pub router: Router,
 }
 
 // methods to build the application
 impl AppService {
     // create a new application instance
-    pub fn new(config: AppConfig, state: AppState) -> Self {
+    pub fn new(state: AppState) -> Self {
         let router = Self::build_router(state);
-        Self { config, router }
+        Self { router }
     }
 
     // build the application router with all routes and middleware layers
@@ -48,11 +48,15 @@ impl AppService {
             .on_response(DefaultOnResponse::new().include_headers(true));
         let x_request_id = HeaderName::from_static("x-request-id");
 
+        let secure_api = Router::new()
+            .route("/{id}", get(get_redirect))
+            .route("/", post(post_shorten))
+            .route_layer(from_fn_with_state(state.clone(), check_api_key));
+
         // build the application router
         Router::new()
             .route("/health_check", get(health_check))
-            .route("/{id}", get(get_redirect))
-            .route("/", post(post_shorten))
+            .merge(secure_api)
             .with_state(state)
             .layer(
                 ServiceBuilder::new()
