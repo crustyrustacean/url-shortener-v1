@@ -1,7 +1,7 @@
 // src/lib/config.rs
 
 // dependencies
-use crate::types::ShuttleSecretStore;
+use crate::types::{ShuttleCustomError, ShuttleSecretStore};
 use anyhow::{Context, Result, anyhow};
 use url::Url;
 
@@ -20,7 +20,7 @@ impl AppConfig {
 
 // implement the TryFrom trait for the AppConfig type
 impl TryFrom<&ShuttleSecretStore> for AppConfig {
-    type Error = anyhow::Error;
+    type Error = ShuttleCustomError;
 
     fn try_from(secrets: &ShuttleSecretStore) -> Result<Self> {
         let raw = secrets
